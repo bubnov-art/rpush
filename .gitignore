@@ -1,0 +1,33 @@
+dump.rdb
+.bundle
+pkg/*
+coverage/
+.rbx/
+spec/acceptance/fixtures
+.rbenv-version
+gcm_test/bin
+.DS_Store
+spec/tmp/
+.vagrant/
+tmp/
+log/
+
+## Environment normalization:
+/.bundle/
+/vendor/bundle
+/lib/bundler/man/
+
+### RubyMine ###
+# Covers JetBrains IDEs: IntelliJ, RubyMine, PhpStorm, AppCode, PyCharm, CLion, Android Studio and Webstorm
+
+*.iml
+
+## Directory-based project format:
+.idea/
+
+# Appraisal
+gemfiles/*.lock
+
+# Keep the Gemfile.lock in the repo
+# http://bundler.io/blog/2018/01/17/making-gem-development-a-little-better.html
+# Gemfile.lock

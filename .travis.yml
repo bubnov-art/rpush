@@ -1,0 +1,46 @@
+language: ruby
+
+dist: trusty
+
+sudo: false
+
+cache: bundler
+
+compiler: clang
+
+rvm:
+  - 2.2.10
+  - 2.3.7
+  - 2.4.4
+  - 2.5.1
+
+gemfile:
+  - gemfiles/rails_4.2.gemfile
+  - gemfiles/rails_5.0.gemfile
+  - gemfiles/rails_5.1.gemfile
+  - gemfiles/rails_5.2.gemfile
+  - gemfiles/rails_edge.gemfile
+
+services:
+  - redis-server
+
+before_script: psql -c 'create database rpush_test;' -U postgres >/dev/null
+before_install:
+  - gem update --system
+  - gem update bundler
+
+env:
+  global:
+    - AMAZON_S3_BUCKET=rpush
+    - AMAZON_ACCESS_KEY_ID=AKIAIWENGKCRZZX7NGOQ
+    - secure: "JZSnurdpqClRgy2s99xFaOymuCDaCh8rZmHgj8Wj/KRFNDuEFVq7CgUjAg24shL4aB+uE/sgBemfsuvJLcWT27/7bi1h/idepNdB36l+GhdJj5CovtqPGX9rXv6vp1s0tELgjxTcx17IQ1oZ5iqTozg9UWWpCXtOBB70/aJvTn8="
+  matrix:
+    - CLIENT=active_record
+    - CLIENT=redis
+
+matrix:
+  fast_finish: true
+  allow_failures:
+    - gemfile: gemfiles/rails_edge.gemfile
+    - gemfile: gemfiles/rails_5.2.gemfile
+      env: CLIENT=redis
