@@ -158,7 +158,7 @@ module Rpush
         def do_post
           post = Net::HTTP::Post.new(FCM_URI.path, 'Content-Type'  => 'application/json',
                                                    'Authorization' => "key=#{@app.auth_key}")
-          post.verify_mode = OpenSSL::SSL::VERIFY_NONE
+          @http.verify_mode = OpenSSL::SSL::VERIFY_NONE
           post.body = @notification.as_json.to_json
           @http.request(FCM_URI, post)
         end
