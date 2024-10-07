@@ -161,7 +161,7 @@ module Rpush
         end
 
         def obtain_access_token
-          GoogleCredentialCache.instance.access_token(SCOPE, @app.certificate)
+          Rpush::Deamon::GoogleCredentialCache.instance.access_token(SCOPE, @app.certificate)
         end
 
         def do_post
