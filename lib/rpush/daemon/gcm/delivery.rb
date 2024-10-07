@@ -5,16 +5,21 @@ module Rpush
       class Delivery < Rpush::Daemon::Delivery
         include MultiJsonHelper
 
-        host = 'https://fcm.googleapis.com'
-        FCM_URI = URI.parse("#{host}/fcm/send")
+        # host = 'https://fcm.googleapis.com'
+        # FCM_URI = URI.parse("#{host}/fcm/send")
         UNAVAILABLE_STATES = %w(Unavailable BadGateway InternalServerError)
         INVALID_REGISTRATION_ID_STATES = %w(InvalidRegistration MismatchSenderId NotRegistered InvalidPackageName)
+
+        HOST = 'https://fcm.googleapis.com'.freeze
+        SCOPE = 'https://www.googleapis.com/auth/firebase.messaging'.freeze
 
         def initialize(app, http, notification, batch)
           @app = app
           @http = http
           @notification = notification
           @batch = batch
+          @uri = URI.parse("#{HOST}/v1/projects/#{@app.client_id}/messages:send")
+          puts 'uri si @uri'
         end
 
         def perform
@@ -155,12 +160,22 @@ module Rpush
           "Notification #{@notification.id} will be retried after #{@notification.deliver_after.strftime('%Y-%m-%d %H:%M:%S')} (retry #{@notification.retries})."
         end
 
+        def obtain_access_token
+          GoogleCredentialCache.instance.access_token(SCOPE, @app.certificate)
+        end
+
         def do_post
-          post = Net::HTTP::Post.new(FCM_URI.path, 'Content-Type'  => 'application/json',
-                                                   'Authorization' => "key=#{@app.auth_key}")
+          token = obtain_access_token['access_token']
+          post = Net::HTTP::Post.new(@uri.path, 'Content-Type' => 'application/json',
+                                     'Authorization' => "Bearer #{token}")
           @http.verify_mode = OpenSSL::SSL::VERIFY_NONE
           post.body = @notification.as_json.to_json
-          @http.request(FCM_URI, post)
+          @http.request(@uri, post)
+          # post = Net::HTTP::Post.new(FCM_URI.path, 'Content-Type'  => 'application/json',
+          #                                          'Authorization' => "key=#{@app.auth_key}")
+          # @http.verify_mode = OpenSSL::SSL::VERIFY_NONE
+          # post.body = @notification.as_json.to_json
+          # @http.request(FCM_URI, post)
         end
       end
 
