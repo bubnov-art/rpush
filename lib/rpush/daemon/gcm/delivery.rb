@@ -18,8 +18,10 @@ module Rpush
           @http = http
           @notification = notification
           @batch = batch
+          # puts @app.to_json
           @uri = URI.parse("#{HOST}/v1/projects/#{@app.client_id}/messages:send")
-          puts 'uri si @uri'
+          # puts "uri si #{@uri}"
+          # puts @notification
         end
 
         def perform
@@ -161,7 +163,7 @@ module Rpush
         end
 
         def obtain_access_token
-          Rpush::Deamon::GoogleCredentialCache.instance.access_token(SCOPE, @app.certificate)
+          GoogleCredentialCache.instance.access_token(SCOPE, @app.certificate)
         end
 
         def do_post
@@ -169,8 +171,13 @@ module Rpush
           post = Net::HTTP::Post.new(@uri.path, 'Content-Type' => 'application/json',
                                      'Authorization' => "Bearer #{token}")
           @http.verify_mode = OpenSSL::SSL::VERIFY_NONE
+          # puts @notification.as_json.to_json
           post.body = @notification.as_json.to_json
-          @http.request(@uri, post)
+          # puts post.body
+          result = @http.request(@uri, post)
+          # puts result
+          # puts result.body
+          result
           # post = Net::HTTP::Post.new(FCM_URI.path, 'Content-Type'  => 'application/json',
           #                                          'Authorization' => "key=#{@app.auth_key}")
           # @http.verify_mode = OpenSSL::SSL::VERIFY_NONE

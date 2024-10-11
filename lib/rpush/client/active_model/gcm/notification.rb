@@ -6,6 +6,8 @@ module Rpush
           GCM_PRIORITY_HIGH = Rpush::Client::ActiveModel::Apns::Notification::APNS_PRIORITY_IMMEDIATE
           GCM_PRIORITY_NORMAL = Rpush::Client::ActiveModel::Apns::Notification::APNS_PRIORITY_CONSERVE_POWER
           GCM_PRIORITIES = [GCM_PRIORITY_HIGH, GCM_PRIORITY_NORMAL]
+          ROOT_NOTIFICATION_KEYS = %w[title body image].freeze
+
 
           def self.included(base)
             base.instance_eval do
@@ -36,18 +38,25 @@ module Rpush
 
           def as_json(options = nil)
             json = {
-                'registration_ids' => registration_ids,
-                'delay_while_idle' => delay_while_idle,
-                'data' => data
+                'token' => device_token,
+                'data' => {'title' => data['message']}.merge!(data['data'])
+                # 'delay_while_idle' => delay_while_idle,
             }
-            json['collapse_key'] = collapse_key if collapse_key
-            json['content_available'] = content_available if content_available
-            json['notification'] = notification if notification
-            json['priority'] = priority_for_notification if priority
-            json['time_to_live'] = expiry if expiry
-            json
+            json['notification'] = root_notification if notification
+            { 'message' => json }
+            # json['collapse_key'] = collapse_key if collapse_key
+            # json['content_available'] = content_available if content_available
+            # json['notification'] = notification if notification
+            # json['priority'] = priority_for_notification if priority
+            # json['time_to_live'] = expiry if expiry
           end
 
+          def root_notification
+            return {} unless notification
+
+            notification.slice(*ROOT_NOTIFICATION_KEYS)
+          end
+          
           def priority_for_notification
             return 'high' if priority == GCM_PRIORITY_HIGH
             'normal' if priority == GCM_PRIORITY_NORMAL
