@@ -25,6 +25,7 @@ module Rpush
         end
 
         def perform
+          puts 'perform'
           handle_response(do_post)
         rescue SocketError => error
           mark_retryable(@notification, Time.now + 10.seconds, error)
@@ -41,17 +42,11 @@ module Rpush
         def handle_response(response)
           case response.code.to_i
           when 200
-            ok
+            ok(response)
           when 400
-            bad_request(response)
+            bad_request
           when 401
             unauthorized
-          when 403
-            sender_id_mismatch
-          when 404
-            unregistered(response)
-          when 429
-            too_many_requests
           when 500
             internal_server_error(response)
           when 502
@@ -65,22 +60,21 @@ module Rpush
           end
         end
 
-        def ok
-          reflect(:gcm_delivered_to_recipient, @notification)
+        def ok(response)
+          puts response.body
+          reflect(:gcm_delivered_to_recipient, @notification, 'ok')
           mark_delivered
-          log_info("#{@notification.id} sent to #{@notification.device_token}")
-        end
-        # def ok(response)
-        #   results = process_response(response)
-        #   handle_successes(results.successes)
+          
+          # results = process_response(response)
+          # handle_successes(results.successes)
 
-        #   if results.failures.any?
-        #     handle_failures(results.failures, response)
-        #   else
-        #     mark_delivered
-        #     log_info("#{@notification.id} sent to #{@notification.registration_ids.join(', ')}")
-        #   end
-        # end
+          # if results.failures.any?
+          #   handle_failures(results.failures, response)
+          # else
+          #   mark_delivered
+          #   log_info("#{@notification.id} sent to #{@notification.registration_ids.join(', ')}")
+          # end
+        end
 
         def process_response(response)
           body = multi_json_load(response.body)
@@ -89,37 +83,37 @@ module Rpush
           results
         end
 
-        # def handle_successes(successes)
-        #   successes.each do |result|
-        #     reflect(:gcm_delivered_to_recipient, @notification, result[:registration_id])
-        #     next unless result.key?(:canonical_id)
-        #     reflect(:gcm_canonical_id, result[:registration_id], result[:canonical_id])
-        #   end
-        # end
+        def handle_successes(successes)
+          successes.each do |result|
+            reflect(:gcm_delivered_to_recipient, @notification, result[:registration_id])
+            next unless result.key?(:canonical_id)
+            reflect(:gcm_canonical_id, result[:registration_id], result[:canonical_id])
+          end
+        end
 
-        # def handle_failures(failures, response)
-        #   if failures[:unavailable].count == @notification.registration_ids.count
-        #     retry_delivery(@notification, response)
-        #     log_warn("All recipients unavailable. #{retry_message}")
-        #   else
-        #     if failures[:unavailable].any?
-        #       unavailable_idxs = failures[:unavailable].map { |result| result[:index] }
-        #       new_notification = create_new_notification(response, unavailable_idxs)
-        #       failures.description += " #{unavailable_idxs.join(', ')} will be retried as notification #{new_notification.id}."
-        #     end
-        #     handle_errors(failures)
-        #     fail Rpush::DeliveryError.new(nil, @notification.id, failures.description)
-        #   end
-        # end
+        def handle_failures(failures, response)
+          if failures[:unavailable].count == @notification.registration_ids.count
+            retry_delivery(@notification, response)
+            log_warn("All recipients unavailable. #{retry_message}")
+          else
+            if failures[:unavailable].any?
+              unavailable_idxs = failures[:unavailable].map { |result| result[:index] }
+              new_notification = create_new_notification(response, unavailable_idxs)
+              failures.description += " #{unavailable_idxs.join(', ')} will be retried as notification #{new_notification.id}."
+            end
+            handle_errors(failures)
+            fail Rpush::DeliveryError.new(nil, @notification.id, failures.description)
+          end
+        end
 
-        # def handle_errors(failures)
-        #   failures.each do |result|
-        #     reflect(:gcm_failed_to_recipient, @notification, result[:error], result[:registration_id])
-        #   end
-        #   failures[:invalid].each do |result|
-        #     reflect(:gcm_invalid_registration_id, @app, result[:error], result[:registration_id])
-        #   end
-        # end
+        def handle_errors(failures)
+          failures.each do |result|
+            reflect(:gcm_failed_to_recipient, @notification, result[:error], result[:registration_id])
+          end
+          failures[:invalid].each do |result|
+            reflect(:gcm_invalid_registration_id, @app, result[:error], result[:registration_id])
+          end
+        end
 
         def create_new_notification(response, unavailable_idxs)
           attrs = { 'app_id' => @notification.app_id, 'collapse_key' => @notification.collapse_key, 'delay_while_idle' => @notification.delay_while_idle }
@@ -128,26 +122,12 @@ module Rpush
                                                       registration_ids, deliver_after_header(response), @app)
         end
 
-        def sender_id_mismatch
-          fail Rpush::DeliveryError.new(403, @notification.id, 'The sender ID was mismatched. It seems the device token is wrong.')
-        end
-
-        def unregistered(response)
-          error = parse_error(response)
-          reflect(:gcm_invalid_device_token, @app, error, @notification.device_token)
-          fail Rpush::DeliveryError.new(404, @notification.id, "Client was not registered for your app. (#{error})")
-        end
-
         def bad_request
           fail Rpush::DeliveryError.new(400, @notification.id, 'GCM failed to parse the JSON request. Possibly an Rpush bug, please open an issue.')
         end
 
         def unauthorized
           fail Rpush::DeliveryError.new(401, @notification.id, 'Unauthorized, check your App auth_key.')
-        end
-
-        def too_many_requests
-          fail Rpush::DeliveryError.new(429, @notification.id, 'Slow down. Too many requests were sent!')
         end
 
         def internal_server_error(response)
@@ -183,31 +163,42 @@ module Rpush
           end
         end
 
-        def parse_error(response)
-          error = multi_json_load(response.body)['error']
-          "#{error['status']}: #{error['message']}"
-        end
-
-
         def retry_message
           "Notification #{@notification.id} will be retried after #{@notification.deliver_after.strftime('%Y-%m-%d %H:%M:%S')} (retry #{@notification.retries})."
         end
 
         def obtain_access_token
-          GoogleCredentialCache.instance.access_token(SCOPE, @app.certificate)
+          puts '|||||||||||||| obtaining ||||||||||||'
+          puts 'app'
+          puts @app.to_json if @app
+          puts 'end app'
+
+          puts @app.certificate
+          token = GoogleCredentialCache.instance.access_token(SCOPE, @app.certificate)
+          puts '|||||||||end obtainig |||||||||||'
+          token
         end
 
         def do_post
           token = obtain_access_token['access_token']
+          puts token
+          puts '===================== sending ============================'
+          puts "#{@notification}"
           post = Net::HTTP::Post.new(@uri.path, 'Content-Type' => 'application/json',
                                      'Authorization' => "Bearer #{token}")
           @http.verify_mode = OpenSSL::SSL::VERIFY_NONE
           # puts @notification.as_json.to_json
           post.body = @notification.as_json.to_json
           # puts post.body
+          puts 'post is'
+          puts post.body
+          puts 'end of post'
           result = @http.request(@uri, post)
           # puts result
-          # puts result.body
+          puts '!!!!!!!!!!!!!!!-result-'
+          puts result.body
+          puts '!!!!!!!!!!!!!!!-result-'
+
           result
           # post = Net::HTTP::Post.new(FCM_URI.path, 'Content-Type'  => 'application/json',
           #                                          'Authorization' => "key=#{@app.auth_key}")
@@ -252,44 +243,44 @@ module Rpush
         end
       end
 
-      # class Failures < Hash
-      #   include Enumerable
-      #   attr_writer :all_failed, :description
+      class Failures < Hash
+        include Enumerable
+        attr_writer :all_failed, :description
 
-      #   def initialize
-      #     super[:all] = []
-      #   end
+        def initialize
+          super[:all] = []
+        end
 
-      #   def each
-      #     self[:all].each { |x| yield x }
-      #   end
+        def each
+          self[:all].each { |x| yield x }
+        end
 
-      #   def <<(item)
-      #     self[:all] << item
-      #   end
+        def <<(item)
+          self[:all] << item
+        end
 
-      #   def description
-      #     @description ||= describe
-      #   end
+        def description
+          @description ||= describe
+        end
 
-      #   def any?
-      #     self[:all].any?
-      #   end
+        def any?
+          self[:all].any?
+        end
 
-      #   private
+        private
 
-      #   def describe
-      #     if @all_failed
-      #       error_description = "Failed to deliver to all recipients."
-      #     else
-      #       index_list = map { |item| item[:index] }
-      #       error_description = "Failed to deliver to recipients #{index_list.join(', ')}."
-      #     end
+        def describe
+          if @all_failed
+            error_description = "Failed to deliver to all recipients."
+          else
+            index_list = map { |item| item[:index] }
+            error_description = "Failed to deliver to recipients #{index_list.join(', ')}."
+          end
 
-      #     error_list = map { |item| item[:error] }
-      #     error_description + " Errors: #{error_list.join(', ')}."
-      #   end
-      # end
+          error_list = map { |item| item[:error] }
+          error_description + " Errors: #{error_list.join(', ')}."
+        end
+      end
     end
   end
 end
