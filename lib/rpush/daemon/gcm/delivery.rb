@@ -168,36 +168,36 @@ module Rpush
         end
 
         def obtain_access_token
-          puts '|||||||||||||| obtaining ||||||||||||'
-          puts 'app'
-          puts @app.to_json if @app
-          puts 'end app'
+          # puts '|||||||||||||| obtaining ||||||||||||'
+          # puts 'app'
+          # puts @app.to_json if @app
+          # puts 'end app'
 
-          puts @app.certificate
+          # puts @app.certificate
           token = GoogleCredentialCache.instance.access_token(SCOPE, @app.certificate)
-          puts '|||||||||end obtainig |||||||||||'
+          # puts '|||||||||end obtainig |||||||||||'
           token
         end
 
         def do_post
           token = obtain_access_token['access_token']
-          puts token
-          puts '===================== sending ============================'
-          puts "#{@notification}"
+          # puts token
+          # puts '===================== sending ============================'
+          # puts "#{@notification}"
           post = Net::HTTP::Post.new(@uri.path, 'Content-Type' => 'application/json',
                                      'Authorization' => "Bearer #{token}")
           @http.verify_mode = OpenSSL::SSL::VERIFY_NONE
           # puts @notification.as_json.to_json
           post.body = @notification.as_json.to_json
           # puts post.body
-          puts 'post is'
-          puts post.body
-          puts 'end of post'
+          # puts 'post is'
+          # puts post.body
+          # puts 'end of post'
           result = @http.request(@uri, post)
           # puts result
-          puts '!!!!!!!!!!!!!!!-result-'
-          puts result.body
-          puts '!!!!!!!!!!!!!!!-result-'
+          # puts '!!!!!!!!!!!!!!!-result-'
+          # puts result.body
+          # puts '!!!!!!!!!!!!!!!-result-'
 
           result
           # post = Net::HTTP::Post.new(FCM_URI.path, 'Content-Type'  => 'application/json',
